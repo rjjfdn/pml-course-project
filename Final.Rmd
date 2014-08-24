@@ -1,0 +1,81 @@
+---
+title: "Practical Machine Learning - Course Project"
+output: html_document
+---
+
+## The Dataset
+
+The dataset is the Weight Lifting Exercise Dataset from this website: http://groupware.les.inf.puc-rio.br/har. It is a data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The tasked is to predict the ways in which they did the exercise.
+
+## Data Preprocessing
+
+Before anything else, we need to set the seed for reproducibility and to call the libraries needed. To improve efficiency, we ensure that the code is using all your PC's cores.
+
+```{r echo=TRUE, cache=TRUE}
+set.seed(1234)
+library(doParallel)
+library(randomForest)
+library(caret)
+registerDoParallel(cores=detectCores())
+```
+
+We also need to get the dataset. This snippet assumes that you have downloaded the datasets in the Coursera website. A blank string is also considered NA.
+
+```{r echo=TRUE, cache=TRUE}
+setwd("C:/Users/ReinaldKim/Desktop/Coursera/Data Science/PML - Course Project")
+data <- read.csv("pml-training.csv", na.strings=c('', NA))
+test <- read.csv("pml-testing.csv", na.strings=c('', NA))
+```
+
+Columns with NA are deleted. The first variable "X" is unused. Variables related to the user and variables which are part of another variable such as user name, num window and cvtd timestamp are also unused. 
+
+```{r echo=TRUE, cache=TRUE}
+data <- data[, colSums(is.na(data)) == 0]
+data <- data[-c(1,2,5,6)]
+test <- test[, colSums(is.na(test)) == 0]
+test <- test[-c(1,2,5,6)]
+```
+
+## Random Forest with 10-Fold Cross Validation
+
+We use random forest as our predictor with k-fold cross validation where k=10. Although according to the documentation of the randomForest library, cross validation is already done, we show an "external" cross validation here.
+
+```{r echo=TRUE, cache=TRUE}
+folds <- createFolds(data$classe, k=10, list=TRUE, returnTrain=FALSE)
+accs <- c()
+for(i in 1:10) {
+  fold <- folds[[i]]
+  rf <- randomForest(classe ~ ., data=data[-fold, ])
+  prediction <- predict(rf, data[fold, ])
+  accuracy <- confusionMatrix(prediction, data[fold, ]$classe)$overall[[1]]
+  accs <- c(accs, accuracy)
+}
+accs
+```
+
+It shows that there are three best models with accuracy of 1. We choose the first best model.
+
+## Out of Sample Error
+
+The randomForest library uses OOB error rate to compute for the out of sample error. We also show the 95% confidence interval of the accuracy.
+
+```{r echo=TRUE, cache=TRUE}
+mean <- mean(accs)
+sd <- sd(accs)
+n <- 10
+error <- qt(0.975, df=n-1) * sd / sqrt(n)
+left <- mean - error
+right <- mean + error
+c(left, right)
+
+fold <- folds[[1]]
+rf <- randomForest(classe ~ ., data=data[-fold, ])
+rf
+```
+
+We predict the test data provided.
+
+```{r echo=TRUE, cache=TRUE}
+prediction <- predict(rf, test)
+prediction
+```
